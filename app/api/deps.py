@@ -151,6 +151,9 @@ async def get_current_active_user(
 class RoleChecker:
     """
     Clase para crear dependencias que verifican roles específicos.
+    
+    El usuario con rol "SuperAdministrador" tiene acceso automático a todo,
+    sin necesidad de verificar roles específicos.
     """
     def __init__(self, allowed_roles: List[str]):
         self.allowed_roles = allowed_roles
@@ -161,7 +164,7 @@ class RoleChecker:
     ):
         """
         Verifica si alguno de los roles del usuario actual está en la lista de roles permitidos.
-        Ahora espera un objeto UsuarioReadWithRoles.
+        Si el usuario tiene el rol "SuperAdministrador", se le otorga acceso automático.
         """
         # <<< Acceder a la lista de objetos RolRead
         user_roles_objects = current_user.roles
@@ -169,6 +172,12 @@ class RoleChecker:
         user_role_names = [role.nombre for role in user_roles_objects]
 
         logger.debug(f"Verificando roles. Usuario: {current_user.nombre_usuario}, Roles: {user_role_names}, Roles requeridos: {self.allowed_roles}")
+
+        # 🚀 SUPERADMINISTRADOR: Acceso automático a todo
+        # Verifica por rol "SuperAdministrador" o por nombre de usuario "superadmin" (case-insensitive)
+        if "SuperAdministrador" in user_role_names or current_user.nombre_usuario.lower() == "superadmin":
+            logger.debug(f"Acceso permitido automáticamente para SuperAdministrador '{current_user.nombre_usuario}'.")
+            return
 
         # Comprobar si hay alguna intersección entre los nombres de roles del usuario y los permitidos
         if not any(role_name in self.allowed_roles for role_name in user_role_names):

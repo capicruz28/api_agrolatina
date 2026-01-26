@@ -12,8 +12,10 @@ Características principales:
 """
 from fastapi import APIRouter, HTTPException, status, Depends, Response, Request
 from fastapi.security import OAuth2PasswordRequestForm
+from typing import Dict
 
 from app.schemas.auth import Token, UserDataWithRoles
+from app.schemas.usuario import UsuarioReadWithRoles
 from app.core.auth import (
     authenticate_user,
     create_access_token,
@@ -24,6 +26,7 @@ from app.core.auth import (
 from app.core.config import settings
 from app.core.logging_config import get_logger
 from app.services.usuario_service import UsuarioService
+from app.api.deps import get_current_active_user
 
 router = APIRouter()
 logger = get_logger(__name__)
@@ -155,6 +158,57 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error obteniendo datos del usuario"
+        )
+
+
+# ----------------------------------------------------------------------
+# --- Endpoint para Debug de Roles (útil para verificar roles) ---
+# ----------------------------------------------------------------------
+@router.get(
+    "/me/roles/",
+    response_model=Dict,
+    summary="Obtener roles detallados del usuario actual",
+    description="""
+    Retorna información detallada de los roles del usuario autenticado.
+    Útil para debugging y verificar qué roles tiene asignados.
+    
+    **Permisos requeridos:**
+    - Autenticación (Access Token válido).
+    """
+)
+async def get_my_roles(
+    current_user: UsuarioReadWithRoles = Depends(get_current_active_user)
+):
+    """
+    Retorna información detallada de los roles del usuario actual.
+    Útil para verificar si el rol 'SuperAdministrador' está correctamente asignado.
+    """
+    try:
+        roles_info = []
+        for role in current_user.roles:
+            roles_info.append({
+                "rol_id": role.rol_id,
+                "nombre": role.nombre,
+                "nombre_normalizado": role.nombre.strip().lower(),
+                "descripcion": role.descripcion,
+                "es_activo": role.es_activo
+            })
+        
+        return {
+            "usuario_id": current_user.usuario_id,
+            "nombre_usuario": current_user.nombre_usuario,
+            "roles": roles_info,
+            "nombres_roles": [role.nombre for role in current_user.roles],
+            "tiene_superadmin": any(
+                role.nombre.strip().lower() == "superadministrador" 
+                for role in current_user.roles
+            )
+        }
+    except Exception as e:
+        logger.exception(f"Error obteniendo roles detallados: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error obteniendo roles del usuario"
         )
 
 # ----------------------------------------------------------------------

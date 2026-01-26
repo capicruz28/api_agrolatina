@@ -16,7 +16,7 @@ def execute_query(query: str, params: tuple = (), connection_type: DatabaseConne
             return [dict(zip(columns, row)) for row in cursor.fetchall()]
         except Exception as e:
             logger.error(f"Error en execute_query: {str(e)}")
-            raise DatabaseError(status_code=500, detail=f"Error en la consulta: {str(e)}")
+            raise DatabaseError(detail=f"Error en la consulta: {str(e)}")
         finally:
             cursor.close()
 
@@ -42,7 +42,7 @@ def execute_auth_query(query: str, params: tuple = ()) -> Dict[str, Any]:
 
         except Exception as e:
             logger.error(f"Error en execute_auth_query: {str(e)}")
-            raise DatabaseError(status_code=500, detail=f"Error en la autenticación: {str(e)}")
+            raise DatabaseError(detail=f"Error en la autenticación: {str(e)}")
         finally:
             if cursor:
                 cursor.close()
@@ -78,7 +78,6 @@ def execute_insert(query: str, params: tuple = (), connection_type: DatabaseConn
             conn.rollback()
             logger.error(f"Error en execute_insert: {str(e)}")
             raise DatabaseError(
-                status_code=500,
                 detail=f"Error en la inserción: {str(e)}"
             )
         finally:
@@ -113,7 +112,6 @@ def execute_update(query: str, params: tuple = (), connection_type: DatabaseConn
             conn.rollback()
             logger.error(f"Error en execute_update: {str(e)}")
             raise DatabaseError(
-                status_code=500,
                 detail=f"Error en la actualización: {str(e)}"
             )
         finally:
@@ -135,7 +133,7 @@ def execute_procedure(procedure_name: str, connection_type: DatabaseConnection =
             return results
         except Exception as e:
             logger.error(f"Error en execute_procedure: {str(e)}")
-            raise DatabaseError(status_code=500, detail=f"Error en el procedimiento: {str(e)}")
+            raise DatabaseError(detail=f"Error en el procedimiento: {str(e)}")
         finally:
             cursor.close()
 
@@ -162,7 +160,7 @@ def execute_procedure_params(
             return results
         except Exception as e:
             logger.error(f"Error en execute_procedure_params: {str(e)}")
-            raise DatabaseError(status_code=500, detail=f"Error en el procedimiento: {str(e)}")
+            raise DatabaseError(detail=f"Error en el procedimiento: {str(e)}")
         finally:
             cursor.close()
 
@@ -185,11 +183,11 @@ def execute_transaction(
 
     except pyodbc.Error as db_err:
         logger.error(f"Error de base de datos (pyodbc) en transacción: {db_err}", exc_info=True)
-        raise DatabaseError(status_code=500, detail=f"Error DB en transacción: {str(db_err)}")
+        raise DatabaseError(detail=f"Error DB en transacción: {str(db_err)}")
 
     except Exception as e:
         logger.error(f"Error inesperado (no pyodbc) en transacción: {e}", exc_info=True)
-        raise DatabaseError(status_code=500, detail=f"Error inesperado en transacción: {str(e)}")
+        raise DatabaseError(detail=f"Error inesperado en transacción: {str(e)}")
 
 # Consulta para obtener usuarios paginados con sus roles, filtrando eliminados y buscando
 SELECT_USUARIOS_PAGINATED = """
@@ -606,4 +604,786 @@ SELECT_PERFIL_EXTERNO_QUERY = """
         mtraba00 
     WHERE 
         ctraba = ?;
+"""
+
+# ============================================
+# QUERIES PARA SISTEMA DE VACACIONES Y PERMISOS
+# ============================================
+
+# --- SOLICITUDES ---
+INSERT_SOLICITUD = """
+    INSERT INTO ppavac_solicitud (
+        tipo_solicitud, codigo_permiso, codigo_trabajador, fecha_inicio, fecha_fin,
+        dias_solicitados, observacion, motivo, estado, usuario_registro
+    )
+    OUTPUT INSERTED.id_solicitud, INSERTED.tipo_solicitud, INSERTED.codigo_permiso,
+           INSERTED.codigo_trabajador, INSERTED.fecha_inicio, INSERTED.fecha_fin,
+           INSERTED.dias_solicitados, INSERTED.observacion, INSERTED.motivo,
+           INSERTED.estado, INSERTED.fecha_registro, INSERTED.usuario_registro
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'P', ?);
+"""
+
+SELECT_SOLICITUD_BY_ID = """
+    SELECT 
+        id_solicitud, tipo_solicitud, codigo_permiso, codigo_trabajador,
+        fecha_inicio, fecha_fin, dias_solicitados, observacion, motivo,
+        estado, fecha_registro, usuario_registro, fecha_modificacion,
+        usuario_modificacion, fecha_anulacion, usuario_anulacion,
+        motivo_anulacion, sregdi, fecha_registro_planilla
+    FROM ppavac_solicitud
+    WHERE id_solicitud = ?;
+"""
+
+SELECT_SOLICITUDES_BY_TRABAJADOR = """
+    SELECT 
+        id_solicitud, tipo_solicitud, codigo_permiso, codigo_trabajador,
+        fecha_inicio, fecha_fin, dias_solicitados, observacion, motivo,
+        estado, fecha_registro, usuario_registro, fecha_modificacion,
+        usuario_modificacion, fecha_anulacion, usuario_anulacion,
+        motivo_anulacion, sregdi, fecha_registro_planilla
+    FROM ppavac_solicitud
+    WHERE codigo_trabajador = ?
+    ORDER BY fecha_registro DESC;
+"""
+
+SELECT_SOLICITUDES_PAGINATED = """
+    WITH SolicitudesPaginadas AS (
+        SELECT 
+            s.id_solicitud, s.tipo_solicitud, s.codigo_permiso, s.codigo_trabajador,
+            s.fecha_inicio, s.fecha_fin, s.dias_solicitados, s.observacion, s.motivo,
+            s.estado, s.fecha_registro, s.usuario_registro, s.fecha_modificacion,
+            s.usuario_modificacion, s.fecha_anulacion, s.usuario_anulacion,
+            s.motivo_anulacion, s.sregdi, s.fecha_registro_planilla,
+            p.dconfa AS descripcion_permiso,
+            ROW_NUMBER() OVER (ORDER BY s.fecha_registro DESC) AS rn
+        FROM ppavac_solicitud s
+        LEFT JOIN dbo.vw_mconfa00 p ON s.codigo_permiso COLLATE DATABASE_DEFAULT = p.cconfa COLLATE DATABASE_DEFAULT
+        WHERE (? IS NULL OR s.codigo_trabajador = ?)
+          AND (? IS NULL OR s.estado = ?)
+          AND (? IS NULL OR s.tipo_solicitud = ?)
+          AND (? IS NULL OR s.fecha_inicio >= ?)
+          AND (? IS NULL OR s.fecha_fin <= ?)
+    )
+    SELECT *
+    FROM SolicitudesPaginadas
+    WHERE rn BETWEEN ? AND ?;
+"""
+
+COUNT_SOLICITUDES = """
+    SELECT COUNT(*) as total
+    FROM ppavac_solicitud
+    WHERE (? IS NULL OR codigo_trabajador = ?)
+      AND (? IS NULL OR estado = ?)
+      AND (? IS NULL OR tipo_solicitud = ?)
+      AND (? IS NULL OR fecha_inicio >= ?)
+      AND (? IS NULL OR fecha_fin <= ?);
+"""
+
+UPDATE_SOLICITUD = """
+    UPDATE ppavac_solicitud
+    SET 
+        fecha_inicio = COALESCE(?, fecha_inicio),
+        fecha_fin = COALESCE(?, fecha_fin),
+        dias_solicitados = COALESCE(?, dias_solicitados),
+        observacion = COALESCE(?, observacion),
+        motivo = COALESCE(?, motivo),
+        fecha_modificacion = GETDATE(),
+        usuario_modificacion = ?
+    OUTPUT INSERTED.id_solicitud, INSERTED.tipo_solicitud, INSERTED.codigo_permiso,
+           INSERTED.codigo_trabajador, INSERTED.fecha_inicio, INSERTED.fecha_fin,
+           INSERTED.dias_solicitados, INSERTED.observacion, INSERTED.motivo,
+           INSERTED.estado, INSERTED.fecha_registro, INSERTED.usuario_registro,
+           INSERTED.fecha_modificacion, INSERTED.usuario_modificacion
+    WHERE id_solicitud = ? AND estado = 'P';
+"""
+
+ANULAR_SOLICITUD = """
+    UPDATE ppavac_solicitud
+    SET 
+        estado = 'N',
+        fecha_anulacion = GETDATE(),
+        usuario_anulacion = ?,
+        motivo_anulacion = ?
+    OUTPUT INSERTED.id_solicitud, INSERTED.estado, INSERTED.fecha_anulacion,
+           INSERTED.usuario_anulacion, INSERTED.motivo_anulacion
+    WHERE id_solicitud = ? AND estado = 'P';
+"""
+
+# --- APROBACIONES ---
+INSERT_APROBACION = """
+    INSERT INTO ppavac_aprobacion (
+        id_solicitud, nivel, codigo_trabajador_aprueba, estado, observacion,
+        fecha, usuario, ip_dispositivo, fecha_notificado
+    )
+    OUTPUT INSERTED.id_aprobacion, INSERTED.id_solicitud, INSERTED.nivel,
+           INSERTED.codigo_trabajador_aprueba, INSERTED.estado, INSERTED.observacion,
+           INSERTED.fecha, INSERTED.usuario, INSERTED.ip_dispositivo, INSERTED.fecha_notificado
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+"""
+
+SELECT_APROBACIONES_BY_SOLICITUD = """
+    SELECT 
+        id_aprobacion, id_solicitud, nivel, codigo_trabajador_aprueba,
+        estado, observacion, fecha, usuario, ip_dispositivo, fecha_notificado
+    FROM ppavac_aprobacion
+    WHERE id_solicitud = ?
+    ORDER BY nivel ASC;
+"""
+
+SELECT_APROBACIONES_PENDIENTES = """
+    SELECT 
+        a.id_aprobacion, a.id_solicitud, a.nivel, a.codigo_trabajador_aprueba,
+        a.estado, a.observacion, a.fecha, a.usuario, a.ip_dispositivo, a.fecha_notificado,
+        s.tipo_solicitud, s.codigo_trabajador, s.fecha_inicio, s.fecha_fin, s.dias_solicitados
+    FROM ppavac_aprobacion a
+    INNER JOIN ppavac_solicitud s ON a.id_solicitud = s.id_solicitud
+    WHERE a.codigo_trabajador_aprueba = ?
+      AND a.estado = 'P'
+      AND s.estado = 'P'
+      -- Verificar que todos los niveles anteriores ya fueron aprobados
+      AND NOT EXISTS (
+          SELECT 1 
+          FROM ppavac_aprobacion a_prev
+          WHERE a_prev.id_solicitud = a.id_solicitud
+            AND a_prev.nivel < a.nivel
+            AND a_prev.estado != 'A'
+      )
+    ORDER BY a.fecha_notificado ASC, s.fecha_registro ASC;
+"""
+
+UPDATE_APROBACION = """
+    UPDATE ppavac_aprobacion
+    SET 
+        estado = ?,
+        observacion = COALESCE(?, observacion),
+        fecha = GETDATE(),
+        usuario = ?,
+        ip_dispositivo = COALESCE(?, ip_dispositivo)
+    OUTPUT INSERTED.id_aprobacion, INSERTED.id_solicitud, INSERTED.nivel,
+           INSERTED.codigo_trabajador_aprueba, INSERTED.estado, INSERTED.observacion,
+           INSERTED.fecha, INSERTED.usuario, INSERTED.ip_dispositivo
+    WHERE id_aprobacion = ? AND estado = 'P';
+"""
+
+UPDATE_SOLICITUD_ESTADO = """
+    UPDATE ppavac_solicitud
+    SET 
+        estado = ?,
+        fecha_modificacion = GETDATE(),
+        usuario_modificacion = ?
+    OUTPUT INSERTED.id_solicitud, INSERTED.estado
+    WHERE id_solicitud = ?;
+"""
+
+# --- NOTIFICACIONES ---
+INSERT_NOTIFICACION = """
+    INSERT INTO ppavac_notificacion (
+        codigo_trabajador, id_solicitud, tipo_notificacion, titulo, mensaje,
+        leido, accion_url, prioridad
+    )
+    OUTPUT INSERTED.id_notificacion, INSERTED.codigo_trabajador, INSERTED.id_solicitud,
+           INSERTED.tipo_notificacion, INSERTED.titulo, INSERTED.mensaje,
+           INSERTED.leido, INSERTED.fecha_creacion, INSERTED.fecha_leido,
+           INSERTED.accion_url, INSERTED.prioridad
+    VALUES (?, ?, ?, ?, ?, 'N', ?, ?);
+"""
+
+SELECT_NOTIFICACIONES_BY_TRABAJADOR = """
+    SELECT 
+        id_notificacion, codigo_trabajador, id_solicitud, tipo_notificacion,
+        titulo, mensaje, leido, fecha_creacion, fecha_leido, accion_url, prioridad
+    FROM ppavac_notificacion
+    WHERE codigo_trabajador = ?
+    ORDER BY fecha_creacion DESC;
+"""
+
+SELECT_NOTIFICACIONES_PAGINATED = """
+    WITH NotificacionesPaginadas AS (
+        SELECT 
+            id_notificacion, codigo_trabajador, id_solicitud, tipo_notificacion,
+            titulo, mensaje, leido, fecha_creacion, fecha_leido, accion_url, prioridad,
+            ROW_NUMBER() OVER (ORDER BY fecha_creacion DESC) AS rn
+        FROM ppavac_notificacion
+        WHERE codigo_trabajador = ?
+          AND (? IS NULL OR leido = ?)
+    )
+    SELECT *
+    FROM NotificacionesPaginadas
+    WHERE rn BETWEEN ? AND ?;
+"""
+
+COUNT_NOTIFICACIONES = """
+    SELECT 
+        COUNT(*) as total,
+        SUM(CASE WHEN leido = 'N' THEN 1 ELSE 0 END) as no_leidas
+    FROM ppavac_notificacion
+    WHERE codigo_trabajador = ?;
+"""
+
+UPDATE_NOTIFICACION_LEIDA = """
+    UPDATE ppavac_notificacion
+    SET 
+        leido = 'S',
+        fecha_leido = GETDATE()
+    OUTPUT INSERTED.id_notificacion, INSERTED.leido, INSERTED.fecha_leido
+    WHERE id_notificacion = ? AND leido = 'N';
+"""
+
+# --- CONFIGURACIÓN DE FLUJO ---
+SELECT_CONFIG_FLUJO_APLICABLE = """
+    SELECT TOP 1
+        id_config, tipo_solicitud, codigo_permiso, codigo_area, codigo_seccion,
+        codigo_cargo, dias_desde, dias_hasta, niveles_requeridos, orden, activo
+    FROM ppavac_config_flujo
+    WHERE tipo_solicitud = ?
+      AND (? IS NULL OR codigo_permiso IS NULL OR codigo_permiso = ?)
+      AND (? IS NULL OR codigo_area IS NULL OR codigo_area = ?)
+      AND (? IS NULL OR codigo_seccion IS NULL OR codigo_seccion = ?)
+      AND (? IS NULL OR codigo_cargo IS NULL OR codigo_cargo = ?)
+      AND (? IS NULL OR dias_desde IS NULL OR ? >= dias_desde)
+      AND (? IS NULL OR dias_hasta IS NULL OR ? <= dias_hasta)
+      AND activo = 'S'
+      AND (fecha_hasta IS NULL OR fecha_hasta >= GETDATE())
+    ORDER BY orden ASC;
+"""
+
+SELECT_ALL_CONFIG_FLUJO = """
+    SELECT 
+        id_config, tipo_solicitud, codigo_permiso, codigo_area, codigo_seccion,
+        codigo_cargo, dias_desde, dias_hasta, niveles_requeridos, orden, activo,
+        fecha_desde, fecha_hasta, usuario_registro, fecha_registro, descripcion
+    FROM ppavac_config_flujo
+    ORDER BY orden ASC, fecha_registro DESC;
+"""
+
+# --- JERARQUÍA ---
+SELECT_JERARQUIA_APROBADORES = """
+    SELECT 
+        id_jerarquia, codigo_area, codigo_seccion, codigo_cargo,
+        codigo_trabajador_aprobador, tipo_relacion, nivel_jerarquico, activo
+    FROM ppavac_jerarquia
+    WHERE (? IS NULL OR codigo_area IS NULL OR codigo_area = ?)
+      AND (? IS NULL OR codigo_seccion IS NULL OR codigo_seccion = ?)
+      AND (? IS NULL OR codigo_cargo IS NULL OR codigo_cargo = ?)
+      AND activo = 'S'
+      AND (fecha_hasta IS NULL OR fecha_hasta >= GETDATE())
+    ORDER BY nivel_jerarquico ASC;
+"""
+
+SELECT_ALL_JERARQUIA = """
+    SELECT 
+        id_jerarquia, codigo_area, codigo_seccion, codigo_cargo,
+        codigo_trabajador_aprobador, tipo_relacion, nivel_jerarquico, activo,
+        fecha_desde, fecha_hasta, usuario_registro, fecha_registro, descripcion
+    FROM ppavac_jerarquia
+    ORDER BY nivel_jerarquico ASC, fecha_registro DESC;
+"""
+
+SELECT_ES_APROBADOR = """
+    SELECT 
+        COUNT(*) AS total_configuraciones,
+        MIN(nivel_jerarquico) AS nivel_minimo,
+        MAX(nivel_jerarquico) AS nivel_maximo
+    FROM ppavac_jerarquia
+    WHERE codigo_trabajador_aprobador = ?
+      AND activo = 'S'
+      AND (fecha_hasta IS NULL OR fecha_hasta >= GETDATE());
+"""
+
+SELECT_NIVELES_APROBADOR = """
+    SELECT nivel_jerarquico
+    FROM ppavac_jerarquia
+    WHERE codigo_trabajador_aprobador = ?
+      AND activo = 'S'
+      AND (fecha_hasta IS NULL OR fecha_hasta >= GETDATE())
+    ORDER BY nivel_jerarquico ASC;
+"""
+
+# --- SUSTITUTOS ---
+SELECT_SUSTITUTO_ACTIVO = """
+    SELECT TOP 1
+        id_sustituto, codigo_trabajador_titular, codigo_trabajador_sustituto,
+        fecha_desde, fecha_hasta, motivo, observacion, activo
+    FROM ppavac_sustituto
+    WHERE codigo_trabajador_titular = ?
+      AND activo = 'S'
+      AND fecha_desde <= GETDATE()
+      AND fecha_hasta >= GETDATE()
+    ORDER BY fecha_registro DESC;
+"""
+
+SELECT_ALL_SUSTITUTOS = """
+    SELECT 
+        id_sustituto, codigo_trabajador_titular, codigo_trabajador_sustituto,
+        fecha_desde, fecha_hasta, motivo, observacion, activo,
+        usuario_registro, fecha_registro
+    FROM ppavac_sustituto
+    ORDER BY fecha_registro DESC;
+"""
+
+# --- DISPOSITIVOS ---
+INSERT_DISPOSITIVO = """
+    INSERT INTO ppavac_dispositivo (
+        codigo_trabajador, token_fcm, plataforma, modelo_dispositivo,
+        version_app, version_so, activo, notif_nuevas, notif_aprobadas, notif_rechazadas
+    )
+    OUTPUT INSERTED.id_dispositivo, INSERTED.codigo_trabajador, INSERTED.token_fcm,
+           INSERTED.plataforma, INSERTED.modelo_dispositivo, INSERTED.version_app,
+           INSERTED.version_so, INSERTED.fecha_registro, INSERTED.activo,
+           INSERTED.notif_nuevas, INSERTED.notif_aprobadas, INSERTED.notif_rechazadas
+    VALUES (?, ?, ?, ?, ?, ?, 'S', 'S', 'S', 'S');
+"""
+
+SELECT_DISPOSITIVOS_BY_TRABAJADOR = """
+    SELECT 
+        id_dispositivo, codigo_trabajador, token_fcm, plataforma, modelo_dispositivo,
+        version_app, version_so, fecha_registro, fecha_ultimo_acceso, activo,
+        notif_nuevas, notif_aprobadas, notif_rechazadas
+    FROM ppavac_dispositivo
+    WHERE codigo_trabajador = ? AND activo = 'S';
+"""
+
+UPDATE_DISPOSITIVO_TOKEN = """
+    UPDATE ppavac_dispositivo
+    SET 
+        token_fcm = ?,
+        fecha_ultimo_acceso = GETDATE(),
+        modelo_dispositivo = COALESCE(?, modelo_dispositivo),
+        version_app = COALESCE(?, version_app),
+        version_so = COALESCE(?, version_so)
+    OUTPUT INSERTED.id_dispositivo, INSERTED.token_fcm, INSERTED.fecha_ultimo_acceso
+    WHERE codigo_trabajador = ? AND token_fcm = ?;
+"""
+
+# --- SALDOS DE VACACIONES ---
+SELECT_SALDO_VACACIONES = """
+    SELECT 
+        t.ctraba AS codigo_trabajador,
+        CAST(30.00 AS DECIMAL(5,2)) AS dias_asignados_totales,
+        CAST(COALESCE(SUM(CASE WHEN s.estado = 'A' AND s.tipo_solicitud = 'V' THEN s.dias_solicitados ELSE 0 END), 0) AS DECIMAL(5,2)) AS dias_usados,
+        CAST(COALESCE(SUM(CASE WHEN s.estado = 'P' AND s.tipo_solicitud = 'V' THEN s.dias_solicitados ELSE 0 END), 0) AS DECIMAL(5,2)) AS dias_pendientes,
+        CAST(30.00 - COALESCE(SUM(CASE WHEN s.estado IN ('A', 'P') AND s.tipo_solicitud = 'V' THEN s.dias_solicitados ELSE 0 END), 0) AS DECIMAL(5,2)) AS saldo_disponible
+    FROM dbo.vw_mtraba10 t
+    LEFT JOIN ppavac_solicitud s ON t.ctraba COLLATE DATABASE_DEFAULT = s.codigo_trabajador COLLATE DATABASE_DEFAULT
+        AND s.tipo_solicitud = 'V' 
+        AND s.estado != 'N'
+    WHERE t.ctraba COLLATE DATABASE_DEFAULT = ?
+    GROUP BY t.ctraba;
+"""
+
+# --- CATÁLOGOS ---
+SELECT_CATALOGO_AREAS = """
+    SELECT careas AS codigo, dareas AS descripcion
+    FROM dbo.vw_tareas00
+    ORDER BY dareas;
+"""
+
+SELECT_CATALOGO_SECCIONES = """
+    SELECT csecci AS codigo, dsecci AS descripcion
+    FROM dbo.vw_tsecci00
+    ORDER BY dsecci;
+"""
+
+SELECT_CATALOGO_CARGOS = """
+    SELECT ccargo AS codigo, dcargo AS descripcion
+    FROM dbo.vw_tcargo00
+    ORDER BY dcargo;
+"""
+
+SELECT_CATALOGO_TIPOS_PERMISO = """
+    SELECT cconfa AS codigo, dconfa AS descripcion
+    FROM dbo.vw_mconfa00
+    ORDER BY dconfa;
+"""
+
+# --- TRABAJADORES Y CUMPLEAÑOS ---
+SELECT_CUMPLEANOS_HOY = """
+    WITH CumpleanosPaginados AS (
+        SELECT 
+            t.ctraba AS codigo_trabajador,
+            LTRIM(RTRIM(ISNULL(t.dtraba, ''))) AS nombre_completo,
+            t.careas AS codigo_area,
+            t.csecci AS codigo_seccion,
+            t.ccargo AS codigo_cargo,
+            a.dareas AS descripcion_area,
+            s.dsecci AS descripcion_seccion,
+            c.dcargo AS descripcion_cargo,
+            t.numdni AS dni,
+            CAST(t.fnacim AS DATE) AS fecha_nacimiento,
+            CAST(t.fingre AS DATE) AS fecha_ingreso,
+            CAST(t.ffinco AS DATE) AS fecha_fin_contrato,
+            ROW_NUMBER() OVER (ORDER BY LTRIM(RTRIM(ISNULL(t.dtraba, '')))) AS rn
+        FROM dbo.vw_mtraba10 t
+        LEFT JOIN dbo.vw_tareas00 a ON t.careas COLLATE DATABASE_DEFAULT = a.careas COLLATE DATABASE_DEFAULT
+        LEFT JOIN dbo.vw_tsecci00 s ON t.csecci COLLATE DATABASE_DEFAULT = s.csecci COLLATE DATABASE_DEFAULT
+        LEFT JOIN dbo.vw_tcargo00 c ON t.ccargo COLLATE DATABASE_DEFAULT = c.ccargo COLLATE DATABASE_DEFAULT
+        WHERE DAY(t.fnacim) = DAY(GETDATE())
+          AND MONTH(t.fnacim) = MONTH(GETDATE())
+    )
+    SELECT 
+        codigo_trabajador,
+        nombre_completo,
+        codigo_area,
+        codigo_seccion,
+        codigo_cargo,
+        descripcion_area,
+        descripcion_seccion,
+        descripcion_cargo,
+        dni,
+        fecha_nacimiento,
+        fecha_ingreso,
+        fecha_fin_contrato
+    FROM CumpleanosPaginados
+    WHERE rn > ? AND rn <= ?;
+"""
+
+COUNT_CUMPLEANOS_HOY = """
+    SELECT COUNT(*) AS total
+    FROM dbo.vw_mtraba10 t
+    WHERE DAY(t.fnacim) = DAY(GETDATE())
+      AND MONTH(t.fnacim) = MONTH(GETDATE());
+"""
+
+SELECT_TRABAJADORES_PAGINATED = """
+    WITH TrabajadoresPaginados AS (
+        SELECT 
+            t.ctraba AS codigo_trabajador,
+            LTRIM(RTRIM(ISNULL(t.dtraba, ''))) AS nombre_completo,
+            t.careas AS codigo_area,
+            t.csecci AS codigo_seccion,
+            t.ccargo AS codigo_cargo,
+            a.dareas AS descripcion_area,
+            s.dsecci AS descripcion_seccion,
+            c.dcargo AS descripcion_cargo,
+            t.numdni AS dni,
+            CAST(t.fnacim AS DATE) AS fecha_nacimiento,
+            CAST(t.fingre AS DATE) AS fecha_ingreso,
+            CAST(t.ffinco AS DATE) AS fecha_fin_contrato,
+            ROW_NUMBER() OVER (ORDER BY LTRIM(RTRIM(ISNULL(t.dtraba, '')))) AS rn
+        FROM dbo.vw_mtraba10 t
+        LEFT JOIN dbo.vw_tareas00 a ON t.careas COLLATE DATABASE_DEFAULT = a.careas COLLATE DATABASE_DEFAULT
+        LEFT JOIN dbo.vw_tsecci00 s ON t.csecci COLLATE DATABASE_DEFAULT = s.csecci COLLATE DATABASE_DEFAULT
+        LEFT JOIN dbo.vw_tcargo00 c ON t.ccargo COLLATE DATABASE_DEFAULT = c.ccargo COLLATE DATABASE_DEFAULT
+        WHERE (? IS NULL OR LOWER(t.ctraba) LIKE LOWER(?))
+          AND (? IS NULL OR LOWER(LTRIM(RTRIM(ISNULL(t.dtraba, '')))) LIKE LOWER(?))
+          AND (? IS NULL OR t.careas = ?)
+          AND (? IS NULL OR t.csecci = ?)
+          AND (? IS NULL OR t.ccargo = ?)
+    )
+    SELECT 
+        codigo_trabajador,
+        nombre_completo,
+        codigo_area,
+        codigo_seccion,
+        codigo_cargo,
+        descripcion_area,
+        descripcion_seccion,
+        descripcion_cargo,
+        dni,
+        fecha_nacimiento,
+        fecha_ingreso,
+        fecha_fin_contrato
+    FROM TrabajadoresPaginados
+    WHERE rn > ? AND rn <= ?;
+"""
+
+COUNT_TRABAJADORES = """
+    SELECT COUNT(*) AS total
+    FROM dbo.vw_mtraba10 t
+    WHERE (? IS NULL OR LOWER(t.ctraba) LIKE LOWER(?))
+      AND (? IS NULL OR LOWER(LTRIM(RTRIM(ISNULL(t.dtraba, '')))) LIKE LOWER(?))
+      AND (? IS NULL OR t.careas = ?)
+      AND (? IS NULL OR t.csecci = ?)
+      AND (? IS NULL OR t.ccargo = ?);
+"""
+
+# --- BÚSQUEDAS DE CATÁLOGOS CON FILTROS ---
+# Compatible con SQL Server 2008+ usando ROW_NUMBER()
+SELECT_BUSCAR_AREAS = """
+    SELECT careas AS codigo, dareas AS descripcion
+    FROM (
+        SELECT 
+            careas, dareas,
+            ROW_NUMBER() OVER (ORDER BY dareas) AS rn
+        FROM dbo.vw_tareas00
+        WHERE (? IS NULL OR LOWER(careas) LIKE LOWER(?))
+          AND (? IS NULL OR LOWER(dareas) LIKE LOWER(?))
+    ) AS numbered_rows
+    WHERE rn > ? AND rn <= ?;
+"""
+
+COUNT_BUSCAR_AREAS = """
+    SELECT COUNT(*) AS total
+    FROM dbo.vw_tareas00
+    WHERE (? IS NULL OR LOWER(careas) LIKE LOWER(?))
+      AND (? IS NULL OR LOWER(dareas) LIKE LOWER(?));
+"""
+
+SELECT_BUSCAR_SECCIONES = """
+    SELECT csecci AS codigo, dsecci AS descripcion
+    FROM (
+        SELECT 
+            csecci, dsecci,
+            ROW_NUMBER() OVER (ORDER BY dsecci) AS rn
+        FROM dbo.vw_tsecci00
+        WHERE (? IS NULL OR LOWER(csecci) LIKE LOWER(?))
+          AND (? IS NULL OR LOWER(dsecci) LIKE LOWER(?))
+    ) AS numbered_rows
+    WHERE rn > ? AND rn <= ?;
+"""
+
+COUNT_BUSCAR_SECCIONES = """
+    SELECT COUNT(*) AS total
+    FROM dbo.vw_tsecci00
+    WHERE (? IS NULL OR LOWER(csecci) LIKE LOWER(?))
+      AND (? IS NULL OR LOWER(dsecci) LIKE LOWER(?));
+"""
+
+SELECT_BUSCAR_CARGOS = """
+    SELECT ccargo AS codigo, dcargo AS descripcion
+    FROM (
+        SELECT 
+            ccargo, dcargo,
+            ROW_NUMBER() OVER (ORDER BY dcargo) AS rn
+        FROM dbo.vw_tcargo00
+        WHERE (? IS NULL OR LOWER(ccargo) LIKE LOWER(?))
+          AND (? IS NULL OR LOWER(dcargo) LIKE LOWER(?))
+    ) AS numbered_rows
+    WHERE rn > ? AND rn <= ?;
+"""
+
+COUNT_BUSCAR_CARGOS = """
+    SELECT COUNT(*) AS total
+    FROM dbo.vw_tcargo00
+    WHERE (? IS NULL OR LOWER(ccargo) LIKE LOWER(?))
+      AND (? IS NULL OR LOWER(dcargo) LIKE LOWER(?));
+"""
+
+SELECT_BUSCAR_TRABAJADORES = """
+    SELECT 
+        codigo, nombre_completo, codigo_area, codigo_seccion, codigo_cargo, numero_dni
+    FROM (
+        SELECT 
+            ctraba AS codigo,
+            dtraba AS nombre_completo,
+            careas AS codigo_area,
+            csecci AS codigo_seccion,
+            ccargo AS codigo_cargo,
+            numdni AS numero_dni,
+            ROW_NUMBER() OVER (ORDER BY dtraba) AS rn
+        FROM dbo.vw_mtraba10
+        WHERE (? IS NULL OR LOWER(ctraba) LIKE LOWER(?))
+          AND (? IS NULL OR LOWER(dtraba) LIKE LOWER(?))
+          AND (? IS NULL OR careas = ?)
+          AND (? IS NULL OR csecci = ?)
+          AND (? IS NULL OR ccargo = ?)
+          AND (? IS NULL OR numdni LIKE ?)
+    ) AS numbered_rows
+    WHERE rn > ? AND rn <= ?;
+"""
+
+COUNT_BUSCAR_TRABAJADORES = """
+    SELECT COUNT(*) AS total
+    FROM dbo.vw_mtraba10
+    WHERE (? IS NULL OR LOWER(ctraba) LIKE LOWER(?))
+      AND (? IS NULL OR LOWER(dtraba) LIKE LOWER(?))
+      AND (? IS NULL OR careas = ?)
+      AND (? IS NULL OR csecci = ?)
+      AND (? IS NULL OR ccargo = ?)
+      AND (? IS NULL OR numdni LIKE ?);
+"""
+
+SELECT_TRABAJADOR_BY_CODIGO = """
+    SELECT 
+        ctraba AS codigo_trabajador,
+        dtraba AS nombre_completo,
+        careas AS codigo_area,
+        csecci AS codigo_seccion,
+        ccargo AS codigo_cargo,
+        numdni AS dni
+    FROM dbo.vw_mtraba10
+    WHERE ctraba = ?;
+"""
+
+# --- QUERIES ADMINISTRATIVAS ---
+INSERT_CONFIG_FLUJO = """
+    INSERT INTO ppavac_config_flujo (
+        tipo_solicitud, codigo_permiso, codigo_area, codigo_seccion, codigo_cargo,
+        dias_desde, dias_hasta, niveles_requeridos, orden, activo,
+        fecha_desde, fecha_hasta, usuario_registro, descripcion
+    )
+    OUTPUT INSERTED.id_config, INSERTED.tipo_solicitud, INSERTED.codigo_permiso,
+           INSERTED.codigo_area, INSERTED.codigo_seccion, INSERTED.codigo_cargo,
+           INSERTED.dias_desde, INSERTED.dias_hasta, INSERTED.niveles_requeridos,
+           INSERTED.orden, INSERTED.activo, INSERTED.fecha_desde, INSERTED.fecha_hasta,
+           INSERTED.usuario_registro, INSERTED.fecha_registro, INSERTED.descripcion
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+"""
+
+UPDATE_CONFIG_FLUJO = """
+    UPDATE ppavac_config_flujo
+    SET 
+        tipo_solicitud = COALESCE(?, tipo_solicitud),
+        codigo_permiso = ?,
+        codigo_area = ?,
+        codigo_seccion = ?,
+        codigo_cargo = ?,
+        dias_desde = ?,
+        dias_hasta = ?,
+        niveles_requeridos = COALESCE(?, niveles_requeridos),
+        orden = COALESCE(?, orden),
+        activo = COALESCE(?, activo),
+        fecha_desde = COALESCE(?, fecha_desde),
+        fecha_hasta = ?,
+        descripcion = COALESCE(?, descripcion)
+    OUTPUT INSERTED.id_config, INSERTED.tipo_solicitud, INSERTED.codigo_permiso,
+           INSERTED.codigo_area, INSERTED.codigo_seccion, INSERTED.codigo_cargo,
+           INSERTED.dias_desde, INSERTED.dias_hasta, INSERTED.niveles_requeridos,
+           INSERTED.orden, INSERTED.activo, INSERTED.fecha_desde, INSERTED.fecha_hasta,
+           INSERTED.usuario_registro, INSERTED.fecha_registro, INSERTED.descripcion
+    WHERE id_config = ?;
+"""
+
+DELETE_CONFIG_FLUJO = """
+    DELETE FROM ppavac_config_flujo
+    WHERE id_config = ?;
+"""
+
+SELECT_CONFIG_FLUJO_BY_ID = """
+    SELECT 
+        id_config, tipo_solicitud, codigo_permiso, codigo_area, codigo_seccion,
+        codigo_cargo, dias_desde, dias_hasta, niveles_requeridos, orden, activo,
+        fecha_desde, fecha_hasta, usuario_registro, fecha_registro, descripcion
+    FROM ppavac_config_flujo
+    WHERE id_config = ?;
+"""
+
+INSERT_JERARQUIA = """
+    INSERT INTO ppavac_jerarquia (
+        codigo_area, codigo_seccion, codigo_cargo, codigo_trabajador_aprobador,
+        tipo_relacion, nivel_jerarquico, activo, fecha_desde, fecha_hasta,
+        usuario_registro, descripcion
+    )
+    OUTPUT INSERTED.id_jerarquia, INSERTED.codigo_area, INSERTED.codigo_seccion,
+           INSERTED.codigo_cargo, INSERTED.codigo_trabajador_aprobador,
+           INSERTED.tipo_relacion, INSERTED.nivel_jerarquico, INSERTED.activo,
+           INSERTED.fecha_desde, INSERTED.fecha_hasta, INSERTED.usuario_registro,
+           INSERTED.fecha_registro, INSERTED.descripcion
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+"""
+
+UPDATE_JERARQUIA = """
+    UPDATE ppavac_jerarquia
+    SET 
+        codigo_area = ?,
+        codigo_seccion = ?,
+        codigo_cargo = ?,
+        codigo_trabajador_aprobador = COALESCE(?, codigo_trabajador_aprobador),
+        tipo_relacion = COALESCE(?, tipo_relacion),
+        nivel_jerarquico = COALESCE(?, nivel_jerarquico),
+        activo = COALESCE(?, activo),
+        fecha_desde = COALESCE(?, fecha_desde),
+        fecha_hasta = ?,
+        descripcion = COALESCE(?, descripcion)
+    OUTPUT INSERTED.id_jerarquia, INSERTED.codigo_area, INSERTED.codigo_seccion,
+           INSERTED.codigo_cargo, INSERTED.codigo_trabajador_aprobador,
+           INSERTED.tipo_relacion, INSERTED.nivel_jerarquico, INSERTED.activo,
+           INSERTED.fecha_desde, INSERTED.fecha_hasta, INSERTED.usuario_registro,
+           INSERTED.fecha_registro, INSERTED.descripcion
+    WHERE id_jerarquia = ?;
+"""
+
+SELECT_JERARQUIA_BY_ID = """
+    SELECT 
+        id_jerarquia, codigo_area, codigo_seccion, codigo_cargo,
+        codigo_trabajador_aprobador, tipo_relacion, nivel_jerarquico, activo,
+        fecha_desde, fecha_hasta, usuario_registro, fecha_registro, descripcion
+    FROM ppavac_jerarquia
+    WHERE id_jerarquia = ?;
+"""
+
+DELETE_JERARQUIA = """
+    DELETE FROM ppavac_jerarquia
+    WHERE id_jerarquia = ?;
+"""
+
+INSERT_SUSTITUTO = """
+    INSERT INTO ppavac_sustituto (
+        codigo_trabajador_titular, codigo_trabajador_sustituto,
+        fecha_desde, fecha_hasta, motivo, observacion, activo, usuario_registro
+    )
+    OUTPUT INSERTED.id_sustituto, INSERTED.codigo_trabajador_titular,
+           INSERTED.codigo_trabajador_sustituto, INSERTED.fecha_desde,
+           INSERTED.fecha_hasta, INSERTED.motivo, INSERTED.observacion,
+           INSERTED.activo, INSERTED.usuario_registro, INSERTED.fecha_registro
+    VALUES (?, ?, ?, ?, ?, ?, 'S', ?);
+"""
+
+UPDATE_SUSTITUTO = """
+    UPDATE ppavac_sustituto
+    SET 
+        codigo_trabajador_titular = COALESCE(?, codigo_trabajador_titular),
+        codigo_trabajador_sustituto = COALESCE(?, codigo_trabajador_sustituto),
+        fecha_desde = COALESCE(?, fecha_desde),
+        fecha_hasta = COALESCE(?, fecha_hasta),
+        motivo = COALESCE(?, motivo),
+        observacion = COALESCE(?, observacion),
+        activo = COALESCE(?, activo)
+    OUTPUT INSERTED.id_sustituto, INSERTED.codigo_trabajador_titular,
+           INSERTED.codigo_trabajador_sustituto, INSERTED.fecha_desde,
+           INSERTED.fecha_hasta, INSERTED.motivo, INSERTED.observacion,
+           INSERTED.activo, INSERTED.usuario_registro, INSERTED.fecha_registro
+    WHERE id_sustituto = ?;
+"""
+
+SELECT_SUSTITUTO_BY_ID = """
+    SELECT 
+        id_sustituto, codigo_trabajador_titular, codigo_trabajador_sustituto,
+        fecha_desde, fecha_hasta, motivo, observacion, activo,
+        usuario_registro, fecha_registro
+    FROM ppavac_sustituto
+    WHERE id_sustituto = ?;
+"""
+
+SELECT_ESTADISTICAS_SOLICITUDES = """
+    SELECT 
+        COUNT(*) AS total_solicitudes,
+        SUM(CASE WHEN estado = 'P' THEN 1 ELSE 0 END) AS solicitudes_pendientes,
+        SUM(CASE WHEN estado = 'A' THEN 1 ELSE 0 END) AS solicitudes_aprobadas,
+        SUM(CASE WHEN estado = 'R' THEN 1 ELSE 0 END) AS solicitudes_rechazadas,
+        SUM(CASE WHEN tipo_solicitud = 'V' THEN 1 ELSE 0 END) AS solicitudes_vacaciones,
+        SUM(CASE WHEN tipo_solicitud = 'P' THEN 1 ELSE 0 END) AS solicitudes_permisos
+    FROM ppavac_solicitud
+    WHERE (? IS NULL OR fecha_registro >= ?)
+      AND (? IS NULL OR fecha_registro <= ?);
+"""
+
+SELECT_SOLICITUDES_POR_MES = """
+    SELECT 
+        YEAR(fecha_registro) AS año,
+        MONTH(fecha_registro) AS mes,
+        COUNT(*) AS cantidad,
+        SUM(CASE WHEN tipo_solicitud = 'V' THEN 1 ELSE 0 END) AS vacaciones,
+        SUM(CASE WHEN tipo_solicitud = 'P' THEN 1 ELSE 0 END) AS permisos
+    FROM ppavac_solicitud
+    WHERE (? IS NULL OR fecha_registro >= ?)
+      AND (? IS NULL OR fecha_registro <= ?)
+    GROUP BY YEAR(fecha_registro), MONTH(fecha_registro)
+    ORDER BY año DESC, mes DESC;
+"""
+
+SELECT_ALL_SALDOS_VACACIONES = """
+    SELECT 
+        t.ctraba AS codigo_trabajador,
+        t.dtraba AS nombre_trabajador,
+        CAST(30.00 AS DECIMAL(5,2)) AS dias_asignados_totales,
+        CAST(COALESCE(SUM(CASE WHEN s.estado = 'A' AND s.tipo_solicitud = 'V' THEN s.dias_solicitados ELSE 0 END), 0) AS DECIMAL(5,2)) AS dias_usados,
+        CAST(COALESCE(SUM(CASE WHEN s.estado = 'P' AND s.tipo_solicitud = 'V' THEN s.dias_solicitados ELSE 0 END), 0) AS DECIMAL(5,2)) AS dias_pendientes,
+        CAST(30.00 - COALESCE(SUM(CASE WHEN s.estado IN ('A', 'P') AND s.tipo_solicitud = 'V' THEN s.dias_solicitados ELSE 0 END), 0) AS DECIMAL(5,2)) AS saldo_disponible
+    FROM dbo.vw_mtraba10 t
+    LEFT JOIN ppavac_solicitud s ON t.ctraba = s.codigo_trabajador AND s.estado != 'N'
+    WHERE (? IS NULL OR t.careas = ?)
+      AND (? IS NULL OR t.csecci = ?)
+    GROUP BY t.ctraba, t.dtraba
+    ORDER BY t.dtraba;
 """
