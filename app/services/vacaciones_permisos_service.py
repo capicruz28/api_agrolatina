@@ -237,7 +237,35 @@ class VacacionesPermisosService(BaseService):
                         logger.error(f"Error al anular solicitud {id_solicitud}: {str(cleanup_error)}")
                 raise
             
-            # 5. Obtener solicitud completa
+            # 5. Enviar notificación push a aprobadores (en background, no bloquea)
+            try:
+                # Obtener información del trabajador para la notificación
+                trabajador = execute_query(
+                    SELECT_TRABAJADOR_BY_CODIGO,
+                    (solicitud_data.codigo_trabajador,)
+                )
+                nombre_trabajador = trabajador[0].get('nombre_completo', 'Trabajador') if trabajador else 'Trabajador'
+                
+                # Obtener código de área del trabajador
+                codigo_area = None
+                if trabajador and trabajador[0].get('codigo_area'):
+                    codigo_area = trabajador[0]['codigo_area']
+                
+                # Enviar notificación si hay área
+                if codigo_area:
+                    from app.services.notificaciones_service import NotificacionesService
+                    await NotificacionesService.enviar_notificacion_nueva_solicitud(
+                        id_solicitud=id_solicitud,
+                        tipo_solicitud=solicitud_data.tipo_solicitud,
+                        codigo_trabajador=solicitud_data.codigo_trabajador,
+                        nombre_trabajador=nombre_trabajador,
+                        codigo_area=codigo_area
+                    )
+            except Exception as notif_error:
+                # No fallar la creación de solicitud si falla la notificación
+                logger.warning(f"Error enviando notificación push (no crítico): {str(notif_error)}")
+            
+            # 6. Obtener solicitud completa
             solicitud = await VacacionesPermisosService.obtener_solicitud(id_solicitud)
             
             BaseService.log_operation_success("Creación de solicitud", id_solicitud)

@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import usuarios, auth, menus, roles, permisos, areas, autorizacion, vacaciones_permisos_mobile, vacaciones_permisos_admin
+from app.api.v1.endpoints import usuarios, auth, menus, roles, permisos, areas, autorizacion, vacaciones_permisos_mobile, vacaciones_permisos_admin, notificaciones
 
 api_router = APIRouter()
 
@@ -55,5 +55,11 @@ api_router.include_router(
     vacaciones_permisos_admin.router,
     prefix="/vacaciones/admin",
     tags=["Vacaciones y Permisos (SuperAdmin)"]
+)
+
+api_router.include_router(
+    notificaciones.router,
+    prefix="/notificaciones",
+    tags=["Notificaciones Push"]
 )
 

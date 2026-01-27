@@ -1387,3 +1387,69 @@ SELECT_ALL_SALDOS_VACACIONES = """
     GROUP BY t.ctraba, t.dtraba
     ORDER BY t.dtraba;
 """
+
+# --- DISPOSITIVOS Y NOTIFICACIONES ---
+SELECT_DISPOSITIVO_BY_TOKEN = """
+    SELECT 
+        id_dispositivo,
+        codigo_trabajador,
+        token_fcm,
+        plataforma,
+        modelo_dispositivo,
+        version_app,
+        version_so,
+        activo,
+        notif_nuevas,
+        notif_aprobadas,
+        notif_rechazadas
+    FROM ppavac_dispositivo
+    WHERE token_fcm = ?;
+"""
+
+INSERT_DISPOSITIVO = """
+    INSERT INTO ppavac_dispositivo (
+        codigo_trabajador, token_fcm, plataforma, modelo_dispositivo,
+        version_app, version_so, activo, fecha_registro, fecha_ultimo_acceso,
+        notif_nuevas, notif_aprobadas, notif_rechazadas
+    )
+    OUTPUT INSERTED.id_dispositivo, INSERTED.codigo_trabajador, INSERTED.token_fcm
+    VALUES (?, ?, ?, ?, ?, ?, 'S', GETDATE(), GETDATE(), 'S', 'S', 'S');
+"""
+
+UPDATE_DISPOSITIVO_TOKEN = """
+    UPDATE ppavac_dispositivo
+    SET fecha_ultimo_acceso = GETDATE(),
+        activo = 'S',
+        modelo_dispositivo = COALESCE(?, modelo_dispositivo),
+        version_app = COALESCE(?, version_app),
+        version_so = COALESCE(?, version_so)
+    OUTPUT INSERTED.id_dispositivo, INSERTED.codigo_trabajador, INSERTED.token_fcm
+    WHERE token_fcm = ?;
+"""
+
+SELECT_TOKENS_APROBADORES = """
+    SELECT DISTINCT d.token_fcm, d.codigo_trabajador
+    FROM ppavac_dispositivo d
+    INNER JOIN ppavac_jerarquia j ON d.codigo_trabajador COLLATE DATABASE_DEFAULT = j.codigo_trabajador_aprobador COLLATE DATABASE_DEFAULT
+    WHERE j.codigo_area = ?
+      AND j.activo = 'S'
+      AND (j.fecha_hasta IS NULL OR j.fecha_hasta >= GETDATE())
+      AND d.activo = 'S'
+      AND d.notif_nuevas = 'S'
+    ORDER BY j.nivel_jerarquico ASC;
+"""
+
+SELECT_TOKENS_BY_CODIGOS_TRABAJADORES = """
+    SELECT token_fcm, codigo_trabajador
+    FROM ppavac_dispositivo
+    WHERE codigo_trabajador IN ({})
+      AND activo = 'S'
+      AND notif_nuevas = 'S';
+"""
+
+# Query helper para obtener área del trabajador
+SELECT_AREA_TRABAJADOR = """
+    SELECT careas AS codigo_area
+    FROM dbo.vw_mtraba10
+    WHERE ctraba = ?;
+"""

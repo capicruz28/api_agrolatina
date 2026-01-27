@@ -101,6 +101,29 @@ class DispositivoCreate(BaseModel):
         return v.upper()
 
 
+class DispositivoRegistroToken(BaseModel):
+    """Schema para registrar/actualizar token FCM"""
+    token_fcm: str = Field(..., max_length=500, description="Token de Firebase Cloud Messaging")
+    codigo_trabajador: str = Field(..., max_length=8, description="Código del trabajador")
+    plataforma: str = Field(..., description="Plataforma: A=Android, I=iOS")
+    modelo_dispositivo: Optional[str] = Field(None, max_length=100, description="Modelo del dispositivo")
+    version_app: Optional[str] = Field(None, max_length=20, description="Versión de la app")
+    version_so: Optional[str] = Field(None, max_length=20, description="Versión del SO")
+
+    @field_validator('plataforma')
+    @classmethod
+    def validar_plataforma(cls, v: str) -> str:
+        if v.upper() not in ['A', 'I']:
+            raise ValueError('plataforma debe ser A (Android) o I (iOS)')
+        return v.upper()
+
+
+class DispositivoRegistroResponse(BaseModel):
+    """Schema para respuesta de registro de token"""
+    mensaje: str
+    id_dispositivo: int
+
+
 class ConfigFlujoCreate(BaseModel):
     """Schema para crear una configuración de flujo"""
     tipo_solicitud: str = Field(..., description="V=Vacaciones, P=Permiso")

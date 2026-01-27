@@ -42,6 +42,27 @@ def create_application() -> FastAPI:
 
     # Rutas API v1
     app.include_router(api_router, prefix=settings.API_V1_STR)
+    
+    # Inicializar Firebase Admin SDK (opcional, solo si está configurado)
+    try:
+        import os
+        from app.services.notificaciones_service import NotificacionesService
+        
+        # Intentar obtener ruta de credenciales desde variable de entorno
+        firebase_cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
+        if firebase_cred_path and os.path.exists(firebase_cred_path):
+            if NotificacionesService.inicializar_firebase(firebase_cred_path):
+                logger.info("Firebase Admin SDK inicializado correctamente")
+            else:
+                logger.warning("No se pudo inicializar Firebase Admin SDK. Las notificaciones push no estarán disponibles.")
+        else:
+            # Intentar inicialización por defecto (usa GOOGLE_APPLICATION_CREDENTIALS)
+            if NotificacionesService.inicializar_firebase():
+                logger.info("Firebase Admin SDK inicializado con credenciales por defecto")
+            else:
+                logger.info("Firebase Admin SDK no configurado. Las notificaciones push no estarán disponibles hasta configurarlo.")
+    except Exception as e:
+        logger.warning(f"Error inicializando Firebase Admin SDK: {str(e)}. Las notificaciones push no estarán disponibles.")
 
     # Middleware de logging con timing
     @app.middleware("http")
