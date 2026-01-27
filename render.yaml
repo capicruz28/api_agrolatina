@@ -35,3 +35,14 @@ services:
         value: carpin
       - key: DB_ADMIN_PASSWORD
         value: S1st3m4s
+      
+      # Variables de Firebase (configurar en Render Dashboard como secretos)
+      # IMPORTANTE: NO poner valores aquí, configurarlos como "Secret Files" o variables de entorno secretas
+      - key: FIREBASE_PROJECT_ID
+        sync: false  # No sincronizar desde Git
+      - key: GOOGLE_CLOUD_PROJECT
+        sync: false  # No sincronizar desde Git
+      - key: ENVIRONMENT
+        value: production
+      - key: LOG_LEVEL
+        value: INFO

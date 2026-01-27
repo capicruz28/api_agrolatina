@@ -40,8 +40,12 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
-# Copiar el código fuente
+# Copiar el código fuente (excluyendo archivos sensibles)
 COPY . .
+
+# NOTA: El archivo JSON de Firebase NO debe estar en el repositorio Git
+# Debe configurarse como variable de entorno FIREBASE_CREDENTIALS_PATH
+# o FIREBASE_CREDENTIALS_JSON en la plataforma de despliegue
 
 # Exponer el puerto
 EXPOSE 10000

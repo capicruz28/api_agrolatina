@@ -1420,6 +1420,7 @@ UPDATE_DISPOSITIVO_TOKEN = """
     UPDATE ppavac_dispositivo
     SET fecha_ultimo_acceso = GETDATE(),
         activo = 'S',
+        codigo_trabajador = ?,
         modelo_dispositivo = COALESCE(?, modelo_dispositivo),
         version_app = COALESCE(?, version_app),
         version_so = COALESCE(?, version_so)

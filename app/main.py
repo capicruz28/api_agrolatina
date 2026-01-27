@@ -46,23 +46,79 @@ def create_application() -> FastAPI:
     # Inicializar Firebase Admin SDK (opcional, solo si está configurado)
     try:
         import os
+        import pathlib
+        import json
         from app.services.notificaciones_service import NotificacionesService
         
         # Intentar obtener ruta de credenciales desde variable de entorno
-        firebase_cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
+        firebase_cred_path = os.getenv("FIREBASE_CREDENTIALS_PATH") or os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        firebase_project_id = os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GOOGLE_CLOUD_PROJECT")
+        firebase_cred_json = os.getenv("FIREBASE_CREDENTIALS_JSON")  # Variable de entorno con contenido JSON
+        
+        # Verificar si estamos en producción
+        is_production = os.getenv("ENVIRONMENT", "development").lower() == "production"
+        
+        # Si hay credenciales en variable de entorno (JSON como string), crear archivo temporal
+        if firebase_cred_json and not firebase_cred_path:
+            try:
+                # Parsear JSON para validar
+                cred_data = json.loads(firebase_cred_json)
+                # Crear archivo temporal
+                import tempfile
+                temp_file = tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False)
+                json.dump(cred_data, temp_file)
+                temp_file.close()
+                firebase_cred_path = temp_file.name
+                logger.info("✅ Credenciales de Firebase leídas desde variable de entorno FIREBASE_CREDENTIALS_JSON")
+                # Extraer project_id si no está configurado
+                if not firebase_project_id and 'project_id' in cred_data:
+                    firebase_project_id = cred_data['project_id']
+            except json.JSONDecodeError as e:
+                logger.error(f"⚠️ Error parseando FIREBASE_CREDENTIALS_JSON: {str(e)}")
+            except Exception as e:
+                logger.error(f"⚠️ Error creando archivo temporal de credenciales: {str(e)}")
+        
+        # Si no hay ruta configurada y NO estamos en producción, buscar archivo JSON en la raíz del proyecto
+        if (not firebase_cred_path or not os.path.exists(firebase_cred_path)) and not is_production:
+            # Calcular la raíz del proyecto: desde app/main.py
+            # Subir 1 nivel: app -> raíz
+            current_file = pathlib.Path(__file__).resolve()
+            project_root = current_file.parent.parent  # app/main.py -> app -> raíz
+            
+            # Buscar archivos JSON de Firebase con diferentes patrones
+            patterns = [
+                "*firebase-adminsdk*.json",
+                "*firebase*.json",
+                "serviceAccountKey.json"
+            ]
+            
+            json_files = []
+            for pattern in patterns:
+                json_files.extend(list(project_root.glob(pattern)))
+                if json_files:
+                    break
+            
+            if json_files:
+                firebase_cred_path = str(json_files[0].resolve())
+                logger.info(f"✅ Archivo JSON de Firebase encontrado automáticamente: {firebase_cred_path}")
+        
         if firebase_cred_path and os.path.exists(firebase_cred_path):
-            if NotificacionesService.inicializar_firebase(firebase_cred_path):
-                logger.info("Firebase Admin SDK inicializado correctamente")
+            if NotificacionesService.inicializar_firebase(firebase_cred_path, firebase_project_id):
+                logger.info("✅ Firebase Admin SDK inicializado correctamente")
             else:
-                logger.warning("No se pudo inicializar Firebase Admin SDK. Las notificaciones push no estarán disponibles.")
+                logger.warning("⚠️ No se pudo inicializar Firebase Admin SDK. Las notificaciones push no estarán disponibles.")
         else:
             # Intentar inicialización por defecto (usa GOOGLE_APPLICATION_CREDENTIALS)
-            if NotificacionesService.inicializar_firebase():
-                logger.info("Firebase Admin SDK inicializado con credenciales por defecto")
+            if NotificacionesService.inicializar_firebase(None, firebase_project_id):
+                logger.info("✅ Firebase Admin SDK inicializado con credenciales por defecto")
             else:
-                logger.info("Firebase Admin SDK no configurado. Las notificaciones push no estarán disponibles hasta configurarlo.")
+                if is_production:
+                    logger.warning("⚠️ Firebase Admin SDK no configurado en producción. Configura FIREBASE_CREDENTIALS_PATH o FIREBASE_CREDENTIALS_JSON.")
+                else:
+                    logger.info("ℹ️ Firebase Admin SDK no configurado. Las notificaciones push no estarán disponibles hasta configurarlo.")
+                    logger.info("   Coloca el archivo JSON de Firebase en la raíz del proyecto o configura FIREBASE_CREDENTIALS_PATH.")
     except Exception as e:
-        logger.warning(f"Error inicializando Firebase Admin SDK: {str(e)}. Las notificaciones push no estarán disponibles.")
+        logger.warning(f"⚠️ Error inicializando Firebase Admin SDK: {str(e)}. Las notificaciones push no estarán disponibles.")
 
     # Middleware de logging con timing
     @app.middleware("http")

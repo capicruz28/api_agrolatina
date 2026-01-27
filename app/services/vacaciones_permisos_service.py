@@ -754,8 +754,10 @@ class VacacionesPermisosService(BaseService):
                     prioridad='N'
                 )
             else:
-                # Notificar siguiente aprobador
+                # Notificar siguiente aprobador (notificación en bandeja + push notification)
                 siguiente_aprobacion = aprobaciones_pendientes[0]
+                
+                # 1. Crear notificación en bandeja
                 await VacacionesPermisosService._crear_notificacion(
                     codigo_trabajador=siguiente_aprobacion['codigo_trabajador_aprueba'],
                     id_solicitud=id_solicitud,
@@ -764,6 +766,42 @@ class VacacionesPermisosService(BaseService):
                     mensaje=f"Tiene una solicitud pendiente de aprobación (Nivel {siguiente_aprobacion['nivel']})",
                     prioridad='A'
                 )
+                
+                # 2. Enviar notificación push al siguiente nivel
+                try:
+                    # Obtener información del solicitante para la notificación
+                    solicitud = await VacacionesPermisosService.obtener_solicitud(id_solicitud)
+                    trabajador = execute_query(
+                        SELECT_TRABAJADOR_BY_CODIGO,
+                        (solicitud['codigo_trabajador'],)
+                    )
+                    nombre_trabajador = trabajador[0].get('nombre_completo', 'Trabajador') if trabajador else 'Trabajador'
+                    
+                    from app.services.notificaciones_service import NotificacionesService
+                    resultado_notif = await NotificacionesService.enviar_notificacion_siguiente_nivel(
+                        id_solicitud=id_solicitud,
+                        codigo_trabajador_solicitante=solicitud['codigo_trabajador'],
+                        nombre_trabajador_solicitante=nombre_trabajador,
+                        nivel_siguiente=siguiente_aprobacion['nivel'],
+                        codigo_trabajador_aprobador_siguiente=siguiente_aprobacion['codigo_trabajador_aprueba'],
+                        tipo_solicitud=solicitud.get('tipo_solicitud')
+                    )
+                    
+                    if resultado_notif.get('enviado'):
+                        logger.info(
+                            f"✅ Notificación push enviada al nivel {siguiente_aprobacion['nivel']} "
+                            f"para solicitud {id_solicitud}: {resultado_notif.get('success_count', 0)} dispositivos"
+                        )
+                    else:
+                        logger.warning(
+                            f"⚠️ No se pudo enviar notificación push al nivel {siguiente_aprobacion['nivel']} "
+                            f"para solicitud {id_solicitud}: {resultado_notif.get('mensaje', 'Error desconocido')}"
+                        )
+                except Exception as notif_error:
+                    # No fallar la aprobación si falla la notificación push
+                    logger.exception(
+                        f"❌ Error crítico enviando notificación push al siguiente nivel (no crítico para aprobación): {str(notif_error)}"
+                    )
             
             BaseService.log_operation_success("Aprobación de solicitud", id_solicitud)
             
