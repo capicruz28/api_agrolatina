@@ -175,6 +175,7 @@ async def _authenticate_cliente_user(username: str, password: str) -> Optional[D
                 existing_user['descripcion_usuario'] = user_data_cliente.get('descripcion_usuario')
                 existing_user['area'] = user_data_cliente.get('area')
                 existing_user['cargo'] = user_data_cliente.get('cargo')
+                existing_user['telefono'] = user_data_cliente.get('telefono')
             
             # Normalizar correo vacío a None
             if existing_user.get('correo') == '':
@@ -252,6 +253,7 @@ async def _create_usuario_from_cliente(username: str, codigo_trabajador: str) ->
         result['descripcion_usuario'] = user_data.get('descripcion_usuario')
         result['area'] = user_data.get('area')
         result['cargo'] = user_data.get('cargo')
+        result['telefono'] = user_data.get('telefono')
         
         # Normalizar correo vacío a None
         if result.get('correo') == '':
@@ -393,6 +395,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> Dict:
             user['descripcion_usuario'] = user_data_cliente.get('descripcion_usuario')
             user['area'] = user_data_cliente.get('area')
             user['cargo'] = user_data_cliente.get('cargo')
+            user['telefono'] = user_data_cliente.get('telefono')
     
     # Normalizar correo vacío a None
     if user.get('correo') == '':
@@ -453,6 +456,7 @@ async def get_current_user_from_refresh(
                 user['descripcion_usuario'] = user_data_cliente.get('descripcion_usuario')
                 user['area'] = user_data_cliente.get('area')
                 user['cargo'] = user_data_cliente.get('cargo')
+                user['telefono'] = user_data_cliente.get('telefono')
         
         # Normalizar correo vacío a None
         if user.get('correo') == '':

@@ -444,6 +444,8 @@ class TrabajadorRead(BaseModel):
     descripcion_seccion: Optional[str] = Field(None, description="Descripción de la sección")
     descripcion_cargo: Optional[str] = Field(None, description="Descripción del cargo")
     dni: Optional[str]
+    correo: Optional[str] = Field(None, description="Correo electrónico del trabajador")
+    telefono: Optional[str] = Field(None, description="Teléfono del trabajador")
     fecha_nacimiento: Optional[date] = Field(None, description="Fecha de nacimiento")
     fecha_ingreso: Optional[date] = Field(None, description="Fecha de ingreso")
     fecha_fin_contrato: Optional[date] = Field(None, description="Fecha de fin de contrato")

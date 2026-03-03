@@ -1022,6 +1022,8 @@ SELECT_CUMPLEANOS_HOY = """
             CAST(t.fnacim AS DATE) AS fecha_nacimiento,
             CAST(t.fingre AS DATE) AS fecha_ingreso,
             CAST(t.ffinco AS DATE) AS fecha_fin_contrato,
+            t.nemail01 AS correo,
+            t.ntftra AS telefono,
             ROW_NUMBER() OVER (PARTITION BY t.ctraba ORDER BY t.csecci, t.ccargo) AS rn_worker
         FROM dbo.vw_mtraba10 t
         LEFT JOIN dbo.vw_tareas00 a ON t.careas COLLATE DATABASE_DEFAULT = a.careas COLLATE DATABASE_DEFAULT
@@ -1045,6 +1047,8 @@ SELECT_CUMPLEANOS_HOY = """
             fecha_nacimiento,
             fecha_ingreso,
             fecha_fin_contrato,
+            correo,
+            telefono,
             ROW_NUMBER() OVER (ORDER BY nombre_completo, ctraba) AS rn
         FROM UnTrabajadorPorFila
         WHERE rn_worker = 1
@@ -1061,7 +1065,9 @@ SELECT_CUMPLEANOS_HOY = """
         dni,
         fecha_nacimiento,
         fecha_ingreso,
-        fecha_fin_contrato
+        fecha_fin_contrato,
+        correo,
+        telefono
     FROM CumpleanosPaginados
     WHERE rn > ? AND rn <= ?;
 """
@@ -1089,6 +1095,8 @@ SELECT_TRABAJADORES_PAGINATED = """
             CAST(t.fnacim AS DATE) AS fecha_nacimiento,
             CAST(t.fingre AS DATE) AS fecha_ingreso,
             CAST(t.ffinco AS DATE) AS fecha_fin_contrato,
+            t.nemail01 AS correo,
+            t.ntftra AS telefono,
             ROW_NUMBER() OVER (PARTITION BY t.ctraba ORDER BY t.csecci, t.ccargo) AS rn_worker
         FROM dbo.vw_mtraba10 t
         LEFT JOIN dbo.vw_tareas00 a ON t.careas COLLATE DATABASE_DEFAULT = a.careas COLLATE DATABASE_DEFAULT
@@ -1115,6 +1123,8 @@ SELECT_TRABAJADORES_PAGINATED = """
             fecha_nacimiento,
             fecha_ingreso,
             fecha_fin_contrato,
+            correo,
+            telefono,
             ROW_NUMBER() OVER (ORDER BY nombre_completo, ctraba) AS rn
         FROM UnTrabajadorPorFila
         WHERE rn_worker = 1
@@ -1131,7 +1141,9 @@ SELECT_TRABAJADORES_PAGINATED = """
         dni,
         fecha_nacimiento,
         fecha_ingreso,
-        fecha_fin_contrato
+        fecha_fin_contrato,
+        correo,
+        telefono
     FROM TrabajadoresPaginados
     WHERE rn > ? AND rn <= ?;
 """
@@ -1554,7 +1566,8 @@ SELECT_CLIENTE_USER_DATA = """
         b.area AS area,
         b.cargo AS cargo,
         b.nombres AS nombre,
-        b.apellidos AS apellido
+        b.apellidos AS apellido,
+        b.ntftra AS telefono
     FROM usuarios_web00 a
     INNER JOIN mtraba_web00 b ON a.ctraba = b.ctraba
     WHERE a.cusuar = ?;

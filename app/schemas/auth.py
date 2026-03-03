@@ -113,6 +113,12 @@ class UserDataBase(BaseModel):
         description="Cargo del trabajador del sistema cliente."
     )
 
+    telefono: Optional[str] = Field(
+        None,
+        max_length=20,
+        description="Teléfono de contacto del usuario (proveniente del sistema cliente)."
+    )
+
     @field_validator('nombre_usuario')
     @classmethod
     def validar_nombre_usuario(cls, valor: str) -> str:
