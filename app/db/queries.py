@@ -1716,3 +1716,45 @@ SELECT_AVISOS_EMPRESA = """
     INNER JOIN ttpref00 b ON a.ctpref = b.ctpref
     WHERE b.ctpdoc = 'A';
 """
+
+# ============================================
+# QUERIES PARA AVISO GENERAL DE ACEPTACIÓN (AP)
+# ============================================
+
+# Aviso AP pendiente por trabajador (saprob = 'N')
+SELECT_AVISO_AP_PENDIENTE = """
+    SELECT TOP 1
+        a.ctraba,
+        a.darchi AS archivo_pdf_hex,
+        a.faprob,
+        a.saprob,
+        a.fvisual
+    FROM pbolet00 a
+    WHERE a.ctraba = ?
+      AND a.ctpref = 'AP'
+      AND a.saprob = 'N'
+    ORDER BY a.cannos DESC, a.cmeses DESC, a.nseman DESC;
+"""
+
+# Marcar como visualizado (solo si sigue pendiente y aún no tiene fvisual)
+UPDATE_AVISO_AP_VISUALIZADO = """
+    UPDATE pbolet00
+    SET fvisual = GETDATE()
+    OUTPUT INSERTED.fvisual
+    WHERE ctraba = ?
+      AND ctpref = 'AP'
+      AND saprob = 'N'
+      AND fvisual IS NULL;
+"""
+
+# Aceptar aviso (conforme): saprob -> 'S' y faprob -> fecha/hora actual
+UPDATE_AVISO_AP_ACEPTADO = """
+    UPDATE pbolet00
+    SET
+        faprob = GETDATE(),
+        saprob = 'S'
+    OUTPUT INSERTED.faprob, INSERTED.saprob
+    WHERE ctraba = ?
+      AND ctpref = 'AP'
+      AND saprob = 'N';
+"""
