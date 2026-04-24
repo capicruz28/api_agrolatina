@@ -1,19 +1,23 @@
 # app/db/queries.py
 from typing import List, Dict, Any, Callable
 from app.db.connection import get_db_connection, DatabaseConnection
+from app.db.cursor_utils import fetch_all_dicts
 from app.core.exceptions import DatabaseError
 import pyodbc
 import logging
 
 logger = logging.getLogger(__name__)
 
+_DEFAULT_FETCH_BATCH = 4000
+
 def execute_query(query: str, params: tuple = (), connection_type: DatabaseConnection = DatabaseConnection.DEFAULT) -> List[Dict[str, Any]]:
     with get_db_connection(connection_type) as conn:
         try:
             cursor = conn.cursor()
             cursor.execute(query, params)
-            columns = [column[0] for column in cursor.description]
-            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+            if cursor.description is None:
+                return []
+            return fetch_all_dicts(cursor, batch_size=_DEFAULT_FETCH_BATCH)
         except Exception as e:
             logger.error(f"Error en execute_query: {str(e)}")
             raise DatabaseError(detail=f"Error en la consulta: {str(e)}")
@@ -126,8 +130,7 @@ def execute_procedure(procedure_name: str, connection_type: DatabaseConnection =
             results = []
             while True:
                 if cursor.description:
-                    columns = [column[0] for column in cursor.description]
-                    results.extend([dict(zip(columns, row)) for row in cursor.fetchall()])
+                    results.extend(fetch_all_dicts(cursor, batch_size=_DEFAULT_FETCH_BATCH))
                 if not cursor.nextset():
                     break
             return results
@@ -153,8 +156,7 @@ def execute_procedure_params(
             results = []
             while True:
                 if cursor.description:
-                    columns = [column[0] for column in cursor.description]
-                    results.extend([dict(zip(columns, row)) for row in cursor.fetchall()])
+                    results.extend(fetch_all_dicts(cursor, batch_size=_DEFAULT_FETCH_BATCH))
                 if not cursor.nextset():
                     break
             return results

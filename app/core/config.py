@@ -20,6 +20,16 @@ class Settings(BaseSettings):
     DB_PASSWORD: str = os.getenv("DB_PASSWORD", "")
     DB_DATABASE: str = os.getenv("DB_DATABASE", "")
     DB_PORT: int = int(os.getenv("DB_PORT", "1433"))
+    # ODBC: Native Client 10 es lento en algunos entornos; Driver 17 suele ir mejor.
+    DB_ODBC_DRIVER: str = os.getenv("DB_ODBC_DRIVER", "{ODBC Driver 17 for SQL Server}")
+    DB_CONN_TIMEOUT_SECONDS: int = int(os.getenv("DB_CONN_TIMEOUT_SECONDS", "60"))
+    # Pool solo usado por rutas pesadas (ej. cartera SP)
+    DB_POOL_SIZE: int = int(os.getenv("DB_POOL_SIZE", "10"))
+    DB_CARTERA_FETCH_BATCH: int = int(os.getenv("DB_CARTERA_FETCH_BATCH", "8000"))
+
+    # Empresa / Compañía (para stored procedures legacy)
+    # Debe ser CHAR(1) en BD (ej: '1', '2', 'A', etc.)
+    WCEMPRE: str = os.getenv("WCEMPRE", "1")
 
     # Database Administración
     DB_ADMIN_SERVER: str = os.getenv("DB_ADMIN_SERVER", "")
@@ -103,6 +113,9 @@ class Settings(BaseSettings):
             raise ValueError("SECRET_KEY debe tener al menos 32 caracteres")
         if not self.ALGORITHM:
             raise ValueError("ALGORITHM no está configurado")
+
+        if not self.WCEMPRE or len(str(self.WCEMPRE).strip()) != 1:
+            raise ValueError("WCEMPRE debe estar configurado y tener longitud 1 (CHAR(1))")
 
 # Instancia de configuración
 settings = Settings()

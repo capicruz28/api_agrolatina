@@ -221,12 +221,12 @@ async def reinicializar_firebase(
             
             if json_files:
                 firebase_cred_path = str(json_files[0].resolve())
-                logger.info(f"✅ Archivo JSON de Firebase encontrado automáticamente: {firebase_cred_path}")
+                logger.info(f"[OK] Archivo JSON de Firebase encontrado automáticamente: {firebase_cred_path}")
             else:
                 # Listar archivos en la raíz para debug
                 try:
                     all_files = [f.name for f in project_root.iterdir() if f.is_file() and f.suffix == '.json']
-                    logger.warning(f"⚠️ No se encontraron archivos JSON de Firebase. Archivos JSON encontrados en raíz: {all_files}")
+                    logger.warning(f"[WARN] No se encontraron archivos JSON de Firebase. Archivos JSON encontrados en raíz: {all_files}")
                 except Exception as e:
                     logger.warning(f"Error listando archivos: {str(e)}")
         
@@ -248,9 +248,9 @@ async def reinicializar_firebase(
                 cred_data = json.load(f)
                 project_id_from_json = cred_data.get('project_id')
                 if project_id_from_json:
-                    logger.info(f"✅ Project ID leído del JSON: {project_id_from_json}")
+                    logger.info(f"[OK] Project ID leído del JSON: {project_id_from_json}")
                 else:
-                    logger.warning(f"⚠️ El archivo JSON no contiene 'project_id'")
+                    logger.warning("[WARN] El archivo JSON no contiene 'project_id'")
         except json.JSONDecodeError as e:
             logger.error(f"Error: El archivo JSON no es válido: {str(e)}")
             raise HTTPException(
@@ -285,10 +285,10 @@ async def reinicializar_firebase(
         if firebase_cred_path and os.path.exists(firebase_cred_path):
             cred = credentials.Certificate(firebase_cred_path)
             firebase_admin.initialize_app(cred, {'projectId': project_id})
-            logger.info(f"✅ Firebase Admin SDK reinicializado con project_id: {project_id}")
+            logger.info(f"[OK] Firebase Admin SDK reinicializado con project_id: {project_id}")
         else:
             firebase_admin.initialize_app(options={'projectId': project_id})
-            logger.info(f"✅ Firebase Admin SDK reinicializado con project_id: {project_id}")
+            logger.info(f"[OK] Firebase Admin SDK reinicializado con project_id: {project_id}")
         
         return {
             "success": True,

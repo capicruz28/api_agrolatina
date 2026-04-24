@@ -161,7 +161,7 @@ class SyncService(BaseService):
                     internal_code="PROFILE_UPDATE_FAILED"
                 )
             
-            logger.info(f"✅ Perfil sincronizado exitosamente para usuario ID {usuario_id}")
+            logger.info(f"[OK] Perfil sincronizado exitosamente para usuario ID {usuario_id}")
             
             # 5️⃣ RETORNAR DATOS ACTUALIZADOS
             return {

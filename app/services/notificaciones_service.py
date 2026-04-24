@@ -94,7 +94,7 @@ class NotificacionesService(BaseService):
                 
                 if project_id:
                     firebase_admin.initialize_app(cred, {'projectId': project_id})
-                    logger.info(f"✅ Firebase Admin SDK inicializado con credenciales de: {credential_path}, project_id: {project_id}")
+                    logger.info(f"[OK] Firebase Admin SDK inicializado con credenciales de: {credential_path}, project_id: {project_id}")
                 else:
                     # Intentar inicializar sin project_id explícito (Firebase debería extraerlo del JSON)
                     # Pero si falla, intentar leer el project_id del JSON nuevamente
@@ -113,12 +113,12 @@ class NotificacionesService(BaseService):
                                     # Reinicializar con project_id
                                     firebase_admin.delete_app(app)
                                     firebase_admin.initialize_app(cred, {'projectId': app_project_id})
-                                    logger.info(f"✅ Firebase Admin SDK reinicializado con project_id: {app_project_id}")
+                                    logger.info(f"[OK] Firebase Admin SDK reinicializado con project_id: {app_project_id}")
                                 else:
-                                    logger.warning(f"⚠️ Firebase Admin SDK inicializado sin project_id explícito. Puede fallar al enviar notificaciones.")
+                                    logger.warning("[WARN] Firebase Admin SDK inicializado sin project_id explícito. Puede fallar al enviar notificaciones.")
                                     logger.warning(f"   El archivo JSON no contiene 'project_id'. Configura FIREBASE_PROJECT_ID")
                         else:
-                            logger.info(f"✅ Firebase Admin SDK inicializado con project_id del app: {app_project_id}")
+                            logger.info(f"[OK] Firebase Admin SDK inicializado con project_id del app: {app_project_id}")
                     except Exception as init_error:
                         logger.error(f"Error inicializando Firebase: {str(init_error)}")
                         # Intentar leer project_id del JSON y reinicializar
@@ -128,11 +128,11 @@ class NotificacionesService(BaseService):
                                 app_project_id = cred_data.get('project_id')
                                 if app_project_id:
                                     firebase_admin.initialize_app(cred, {'projectId': app_project_id})
-                                    logger.info(f"✅ Firebase Admin SDK inicializado con project_id del JSON: {app_project_id}")
+                                    logger.info(f"[OK] Firebase Admin SDK inicializado con project_id del JSON: {app_project_id}")
                                 else:
                                     raise init_error
                         except Exception:
-                            logger.error(f"⚠️ No se pudo inicializar Firebase Admin SDK: {str(init_error)}")
+                            logger.error(f"[WARN] No se pudo inicializar Firebase Admin SDK: {str(init_error)}")
                             raise
             else:
                 # Intentar usar credenciales por defecto (variable de entorno GOOGLE_APPLICATION_CREDENTIALS)
@@ -506,7 +506,7 @@ class NotificacionesService(BaseService):
                             firebase_admin.initialize_app(cred, {'projectId': firebase_project_id})
                         else:
                             firebase_admin.initialize_app(options={'projectId': firebase_project_id})
-                        logger.info(f"✅ Firebase Admin SDK reinicializado con project_id: {firebase_project_id}")
+                        logger.info(f"[OK] Firebase Admin SDK reinicializado con project_id: {firebase_project_id}")
                     except Exception as e:
                         logger.error(f"Error reinicializando Firebase: {str(e)}")
                         return {
@@ -829,12 +829,12 @@ class NotificacionesService(BaseService):
             
             if resultado.get('enviado'):
                 logger.info(
-                    f"✅ Notificaci?n al nivel {nivel_siguiente} para solicitud {id_solicitud} enviada exitosamente: "
+                    f"[OK] Notificaci?n al nivel {nivel_siguiente} para solicitud {id_solicitud} enviada exitosamente: "
                     f"{resultado.get('success_count', 0)}/{len(tokens)} dispositivos"
                 )
             else:
                 logger.error(
-                    f"❌ Error enviando notificaci?n al nivel {nivel_siguiente} para solicitud {id_solicitud}: "
+                    f"[ERROR] Error enviando notificaci?n al nivel {nivel_siguiente} para solicitud {id_solicitud}: "
                     f"{resultado.get('mensaje', 'Error desconocido')}"
                 )
             

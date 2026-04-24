@@ -25,7 +25,7 @@ def create_application() -> FastAPI:
         description=settings.DESCRIPTION,
         docs_url="/docs",
         redoc_url="/redoc",
-        redirect_slashes=False  # ✅ Deshabilitar redirecciones automáticas
+        redirect_slashes=False  # Deshabilitar redirecciones automáticas
     )
 
     # CORS: orígenes explícitos y credenciales habilitadas
@@ -42,7 +42,11 @@ def create_application() -> FastAPI:
 
     # Rutas API v1
     app.include_router(api_router, prefix=settings.API_V1_STR)
-    
+    logger.info(
+        "[OK] Cartera (estado registro contable pagos): "
+        f"{settings.API_V1_STR}/estregcontablepagos (+ /{{anio}}, /{{anio}}/{{mes}}, /{{campana}}/{{valor}})"
+    )
+
     # Inicializar Firebase Admin SDK (opcional, solo si está configurado)
     try:
         import os
@@ -69,14 +73,14 @@ def create_application() -> FastAPI:
                 json.dump(cred_data, temp_file)
                 temp_file.close()
                 firebase_cred_path = temp_file.name
-                logger.info("✅ Credenciales de Firebase leídas desde variable de entorno FIREBASE_CREDENTIALS_JSON")
+                logger.info("[OK] Credenciales de Firebase leídas desde variable de entorno FIREBASE_CREDENTIALS_JSON")
                 # Extraer project_id si no está configurado
                 if not firebase_project_id and 'project_id' in cred_data:
                     firebase_project_id = cred_data['project_id']
             except json.JSONDecodeError as e:
-                logger.error(f"⚠️ Error parseando FIREBASE_CREDENTIALS_JSON: {str(e)}")
+                logger.error(f"[WARN] Error parseando FIREBASE_CREDENTIALS_JSON: {str(e)}")
             except Exception as e:
-                logger.error(f"⚠️ Error creando archivo temporal de credenciales: {str(e)}")
+                logger.error(f"[WARN] Error creando archivo temporal de credenciales: {str(e)}")
         
         # Si no hay ruta configurada y NO estamos en producción, buscar archivo JSON en la raíz del proyecto
         if (not firebase_cred_path or not os.path.exists(firebase_cred_path)) and not is_production:
@@ -100,25 +104,25 @@ def create_application() -> FastAPI:
             
             if json_files:
                 firebase_cred_path = str(json_files[0].resolve())
-                logger.info(f"✅ Archivo JSON de Firebase encontrado automáticamente: {firebase_cred_path}")
+                logger.info(f"[OK] Archivo JSON de Firebase encontrado automáticamente: {firebase_cred_path}")
         
         if firebase_cred_path and os.path.exists(firebase_cred_path):
             if NotificacionesService.inicializar_firebase(firebase_cred_path, firebase_project_id):
-                logger.info("✅ Firebase Admin SDK inicializado correctamente")
+                logger.info("[OK] Firebase Admin SDK inicializado correctamente")
             else:
-                logger.warning("⚠️ No se pudo inicializar Firebase Admin SDK. Las notificaciones push no estarán disponibles.")
+                logger.warning("[WARN] No se pudo inicializar Firebase Admin SDK. Las notificaciones push no estarán disponibles.")
         else:
             # Intentar inicialización por defecto (usa GOOGLE_APPLICATION_CREDENTIALS)
             if NotificacionesService.inicializar_firebase(None, firebase_project_id):
-                logger.info("✅ Firebase Admin SDK inicializado con credenciales por defecto")
+                logger.info("[OK] Firebase Admin SDK inicializado con credenciales por defecto")
             else:
                 if is_production:
-                    logger.warning("⚠️ Firebase Admin SDK no configurado en producción. Configura FIREBASE_CREDENTIALS_PATH o FIREBASE_CREDENTIALS_JSON.")
+                    logger.warning("[WARN] Firebase Admin SDK no configurado en producción. Configura FIREBASE_CREDENTIALS_PATH o FIREBASE_CREDENTIALS_JSON.")
                 else:
-                    logger.info("ℹ️ Firebase Admin SDK no configurado. Las notificaciones push no estarán disponibles hasta configurarlo.")
+                    logger.info("[INFO] Firebase Admin SDK no configurado. Las notificaciones push no estarán disponibles hasta configurarlo.")
                     logger.info("   Coloca el archivo JSON de Firebase en la raíz del proyecto o configura FIREBASE_CREDENTIALS_PATH.")
     except Exception as e:
-        logger.warning(f"⚠️ Error inicializando Firebase Admin SDK: {str(e)}. Las notificaciones push no estarán disponibles.")
+        logger.warning(f"[WARN] Error inicializando Firebase Admin SDK: {str(e)}. Las notificaciones push no estarán disponibles.")
 
     # Middleware de logging con timing
     @app.middleware("http")
@@ -173,7 +177,9 @@ async def health_check():
     return {
         "status": "healthy",
         "version": settings.VERSION,
-        "database": db_status
+        "database": db_status,
+        # Ayuda a confirmar que esta instancia es la del repo actual (Swagger/OpenAPI incluye estas rutas)
+        "cartera_contable_pagos_prefix": f"{settings.API_V1_STR}/estregcontablepagos",
     }
 
 # Compatibilidad con código existente

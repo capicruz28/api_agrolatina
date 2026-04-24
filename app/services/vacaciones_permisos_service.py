@@ -268,18 +268,18 @@ class VacacionesPermisosService(BaseService):
                 
                 if resultado_notif.get('enviado'):
                     logger.info(
-                        f"✅ Notificación push enviada exitosamente para solicitud {id_solicitud}: "
+                        f"[OK] Notificación push enviada exitosamente para solicitud {id_solicitud}: "
                         f"{resultado_notif.get('success_count', 0)} dispositivos notificados"
                     )
                 else:
                     logger.warning(
-                        f"⚠️ No se pudo enviar notificación push para solicitud {id_solicitud}: "
+                        f"[WARN] No se pudo enviar notificación push para solicitud {id_solicitud}: "
                         f"{resultado_notif.get('mensaje', 'Error desconocido')}"
                     )
                     
             except Exception as notif_error:
                 # No fallar la creación de solicitud si falla la notificación
-                logger.exception(f"❌ Error crítico enviando notificación push (no crítico para creación): {str(notif_error)}")
+                logger.exception(f"[ERROR] Error crítico enviando notificación push (no crítico para creación): {str(notif_error)}")
             
             # 6. Obtener solicitud completa
             solicitud = await VacacionesPermisosService.obtener_solicitud(id_solicitud)
@@ -789,18 +789,18 @@ class VacacionesPermisosService(BaseService):
                     
                     if resultado_notif.get('enviado'):
                         logger.info(
-                            f"✅ Notificación push enviada al nivel {siguiente_aprobacion['nivel']} "
+                            f"[OK] Notificación push enviada al nivel {siguiente_aprobacion['nivel']} "
                             f"para solicitud {id_solicitud}: {resultado_notif.get('success_count', 0)} dispositivos"
                         )
                     else:
                         logger.warning(
-                            f"⚠️ No se pudo enviar notificación push al nivel {siguiente_aprobacion['nivel']} "
+                            f"[WARN] No se pudo enviar notificación push al nivel {siguiente_aprobacion['nivel']} "
                             f"para solicitud {id_solicitud}: {resultado_notif.get('mensaje', 'Error desconocido')}"
                         )
                 except Exception as notif_error:
                     # No fallar la aprobación si falla la notificación push
                     logger.exception(
-                        f"❌ Error crítico enviando notificación push al siguiente nivel (no crítico para aprobación): {str(notif_error)}"
+                        f"[ERROR] Error crítico enviando notificación push al siguiente nivel (no crítico para aprobación): {str(notif_error)}"
                     )
             
             BaseService.log_operation_success("Aprobación de solicitud", id_solicitud)

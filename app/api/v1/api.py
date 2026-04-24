@@ -1,8 +1,21 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import usuarios, auth, menus, roles, permisos, areas, autorizacion, vacaciones_permisos_mobile, vacaciones_permisos_admin, notificaciones, avisos_ap
+from app.api.v1.endpoints import (
+    usuarios,
+    auth,
+    menus,
+    roles,
+    permisos,
+    areas,
+    autorizacion,
+    vacaciones_permisos_mobile,
+    vacaciones_permisos_admin,
+    notificaciones,
+    avisos_ap,
+    estregcontablepagos,
+)
 
 api_router = APIRouter()
-
+"""
 api_router.include_router(
     auth.router,
     prefix="/auth",
@@ -67,4 +80,10 @@ api_router.include_router(
     avisos_ap.router,
     prefix="/avisos",
     tags=["Avisos (AP)"]
+)
+"""
+api_router.include_router(
+    estregcontablepagos.router,
+    prefix="",
+    tags=["Estado Registro Contable Pagos"]
 )

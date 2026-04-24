@@ -250,15 +250,15 @@ async def refresh_access_token(
     """
     # Logs para depuración (mantenidos del código original)
     cookies = request.cookies
-    logger.info(f"🍪 [REFRESH] Cookies recibidas: {list(cookies.keys())}")
-    logger.info(f"🍪 [REFRESH] refresh_token presente: {'refresh_token' in cookies}")
+    logger.info(f"[REFRESH] Cookies recibidas: {list(cookies.keys())}")
+    logger.info(f"[REFRESH] refresh_token presente: {'refresh_token' in cookies}")
     if settings.REFRESH_COOKIE_NAME in cookies:
         token_preview = cookies[settings.REFRESH_COOKIE_NAME][:30] if len(cookies[settings.REFRESH_COOKIE_NAME]) > 30 else cookies[settings.REFRESH_COOKIE_NAME]
-        logger.info(f"🍪 [REFRESH] refresh_token value (primeros 30 chars): {token_preview}...")
+        logger.info(f"[REFRESH] refresh_token value (primeros 30 chars): {token_preview}...")
     else:
-        logger.warning(f"⚠️ [REFRESH] NO SE RECIBIÓ COOKIE {settings.REFRESH_COOKIE_NAME}")
+        logger.warning(f"[WARN] [REFRESH] NO SE RECIBIÓ COOKIE {settings.REFRESH_COOKIE_NAME}")
     
-    logger.info(f"🔍 [REFRESH] Headers recibidos: {dict(request.headers)}")
+    logger.info(f"[REFRESH] Headers recibidos: {dict(request.headers)}")
 
     try:
         username = current_user.get("nombre_usuario") # Asumiendo que el payload del refresh tiene "nombre_usuario" o "sub"
@@ -279,7 +279,7 @@ async def refresh_access_token(
             max_age=settings.REFRESH_COOKIE_MAX_AGE,
             path="/",
         )
-        logger.info(f"✅ [REFRESH] Token refrescado exitosamente para usuario: {username}")
+        logger.info(f"[OK] [REFRESH] Token refrescado exitosamente para usuario: {username}")
         return {
             "access_token": new_access_token,
             "token_type": "bearer",

@@ -16,10 +16,11 @@ def get_connection_string(connection_type: DatabaseConnection = DatabaseConnecti
     """
     Obtiene la cadena de conexión según el tipo de conexión requerida.
     """
+    driver = settings.DB_ODBC_DRIVER
     if connection_type == DatabaseConnection.ADMIN:
         # Conexión para administración
         return (
-            f"DRIVER={{SQL Server Native Client 10.0}};"
+            f"DRIVER={driver};"
             f"SERVER={settings.DB_ADMIN_SERVER},{settings.DB_ADMIN_PORT};"
             f"DATABASE={settings.DB_ADMIN_DATABASE};"
             f"UID={settings.DB_ADMIN_USER};"
@@ -29,7 +30,7 @@ def get_connection_string(connection_type: DatabaseConnection = DatabaseConnecti
     else:
         # Conexión default (la que ya tenías)
         return (
-            f"DRIVER={{SQL Server Native Client 10.0}};"
+            f"DRIVER={driver};"
             f"SERVER={settings.DB_SERVER},{settings.DB_PORT};"
             f"DATABASE={settings.DB_DATABASE};"
             f"UID={settings.DB_USER};"
@@ -46,7 +47,7 @@ def get_db_connection(connection_type: DatabaseConnection = DatabaseConnection.D
     conn = None
     try:
         conn_str = get_connection_string(connection_type)
-        conn = pyodbc.connect(conn_str)
+        conn = pyodbc.connect(conn_str, timeout=max(5, settings.DB_CONN_TIMEOUT_SECONDS))
         logger.debug(f"Conexión a BD ({connection_type.value}) establecida.")
         yield conn
 
