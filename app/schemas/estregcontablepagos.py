@@ -37,8 +37,10 @@ class EstRegContablePagosItem(BaseModel):
 
     campanna: Optional[str] = None
     centro_costos: Optional[str] = None
-    gasto: Optional[str] = None
-    fundo: Optional[str] = None
+    codigo_moneda: Optional[str] = None
+    cultivo: Optional[str] = None
+    glosa_cabecera: Optional[str] = None
+    glosa_detalle: Optional[str] = None
 
 
 class EstRegContablePagosApiResponse(BaseModel):
