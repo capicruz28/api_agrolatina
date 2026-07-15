@@ -4,24 +4,41 @@ from datetime import date
 from typing import Any, List, Optional
 
 from fastapi import APIRouter, HTTPException, Path, Query, status
-from pydantic import TypeAdapter
 
 from app.core.exceptions import CustomException, ValidationError
 from app.core.logging_config import get_logger
 from app.schemas.estregcontablepagos import (
     EstRegContablePagosApiResponse,
     EstRegContablePagosItem,
+    PagoDetalleResponse,
 )
 from app.services.estregcontablepagos_service import EstRegContablePagosService
 
 logger = get_logger(__name__)
 router = APIRouter()
 
-_CARTERA_ROWS = TypeAdapter(list[EstRegContablePagosItem])
+
+def _invoice_key(row: dict[str, Any]) -> tuple[Any, Any, Any]:
+    return (row["RUC"], row["serie"], row["numero"])
+
+
+def _agrupar_facturas(raw_rows: List[dict[str, Any]]) -> list[EstRegContablePagosItem]:
+    agrupado: dict[tuple[Any, Any, Any], EstRegContablePagosItem] = {}
+
+    for row in raw_rows:
+        key = _invoice_key(row)
+
+        if key not in agrupado:
+            agrupado[key] = EstRegContablePagosItem.model_validate(row)
+
+        if row.get("marca_registro") == "DETALLE":
+            agrupado[key].detalle_pagos.append(PagoDetalleResponse.model_validate(row))
+
+    return list(agrupado.values())
 
 
 def _to_api_response(raw_rows: List[dict[str, Any]]) -> EstRegContablePagosApiResponse:
-    results = _CARTERA_ROWS.validate_python(raw_rows)
+    results = _agrupar_facturas(raw_rows)
     return EstRegContablePagosApiResponse(
         error=0,
         total=len(results),
